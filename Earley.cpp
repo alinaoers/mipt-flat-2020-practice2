@@ -6,9 +6,9 @@ const char* IncorrectInput::what() const noexcept {
 
 Configuration::Configuration() = default;
   
-Configuration::Configuration(char symb, const std::string& state, int pos, int start_pos) : from_(symb), to_(state), pos_(pos), start_pos_(start_pos) {}
+Configuration::Configuration(char symb, const std::string& state, size_t pos, size_t start_pos) : from_(symb), to_(state), pos_(pos), start_pos_(start_pos) {}
   
-Configuration::Configuration(const std::string& input, int size, int cur_start) : from_(input[cur_start]), pos_(0), start_pos_(0) {
+Configuration::Configuration(const std::string& input, size_t size, size_t cur_start) : from_(input[cur_start]), pos_(0), start_pos_(0) {
   if (input[cur_start + 1] != '-' || input[cur_start + 2] != '>') {
     throw IncorrectInput();
   }
@@ -30,23 +30,16 @@ Configuration::Configuration(const Configuration& other) : from_(other.from_), p
   std::copy(other.to_.begin(), other.to_.end(), to_.begin());
 }
   
-char Configuration::NextLetter() const {
-  if (pos_ >= to_.size()) {
-    return '#';
-  } else {
-    return to_[pos_];
-  }
+char& Configuration::NextLetter() {
+  return to_[pos_];
 }
 
 bool operator==(const Configuration& first, const Configuration& second) {
   return (first.from_ == second.from_ && first.to_ == second.to_ && first.pos_ == second.pos_ && first.start_pos_ == second.start_pos_);
 }
 
-State::State() = default;
-State::State(const Configuration& c, bool used_p, bool used_c) : conf(c), used_for_predict(used_p), used_for_complete(used_c) {}
-
-bool operator==(const State& first, const State& second) {
-  return (first.conf == second.conf && first.used_for_complete == second.used_for_complete && first.used_for_predict == second.used_for_predict);
+bool operator<(const Configuration& first, const Configuration& second) {
+  return (first.from_ < second.from_ || (first.from_ == second.from_ && first.to_ < second.to_) || (first.from_ == second.from_ && first.to_ == second.to_ && first.pos_ < second.pos_) || (first.from_ == second.from_ && first.to_ == second.to_ && first.pos_ == second.pos_ && first.start_pos_ < second.start_pos_));
 }
 
 bool NotTerm(char symb) {
@@ -60,7 +53,7 @@ bool FinishedConf(const Configuration& conf) {
 
 Algo::Algo() = default;
 Algo::Algo(const Grammar& g) : result_(1), g_(g) {
-  result_[0].push_back({Configuration('A', "S", 0, 0)});
+  result_[0].insert(Configuration('A', "S", 0, 0));
 }
   
 bool Algo::HasWord(const std::string& word) {
@@ -68,14 +61,14 @@ bool Algo::HasWord(const std::string& word) {
     Scan(word, i);
     bool updated = true;
     while (updated) {
-      int old_size = result_[i].size();
+      size_t old_size = result_[i].size();
       Complete(i);
       Predict(i);
       updated = (old_size != result_[i].size());
     }
   }
 
-  for (auto& [conf, used_p, used_c] : result_[word.size()]) {
+  for (auto& conf : result_[word.size()]) {
     if (FinishedConf(conf)) {
       return true;
     }
@@ -83,52 +76,49 @@ bool Algo::HasWord(const std::string& word) {
   return false;
 }
   
-void Algo::Scan(const std::string& word, int idx) {
+void Algo::Scan(const std::string& word, size_t idx) {
   if (idx == 0) return;
-  result_.push_back({});
-  for (auto& [conf, used_p, used_c] : result_[idx - 1]) {
+  result_.resize(result_.size() + 1);
+  for (auto conf : result_[idx - 1]) {
     if (word[idx - 1] == conf.NextLetter()) {
-      result_[idx].push_back(Configuration(conf.from_, conf.to_, conf.pos_ + 1, conf.start_pos_));
+      result_[idx].insert(Configuration(conf.from_, conf.to_, conf.pos_ + 1, conf.start_pos_));
     }
   }
 }
   
-void Algo::Predict(int idx) {
-  for (auto& [conf, used_p, used_c] : result_[idx]) {
+void Algo::Predict(size_t idx) {
+  for (auto conf : result_[idx]) {
     char next_symb = conf.NextLetter();
-    if (next_symb == '#') continue;
-    if (NotTerm(next_symb) && !used_p) {
-      used_p = true;
+    if (NotTerm(next_symb)) {
       for (auto start_conf : g_) {
         if (start_conf.from_ == next_symb) {
-          result_[idx].push_back({Configuration(start_conf.from_, start_conf.to_, 0, idx)});
+          result_[idx].insert(Configuration(start_conf.from_, start_conf.to_, 0, idx));
         }
       }
     }
   }
 }
   
-void Algo::Complete(int idx) {
-  for (auto& [conf, used_p, used_c] : result_[idx]) {
-    if (conf.pos_ == conf.to_.size() && !used_c) {
-      used_c = true;
-      for (auto [up_conf, up_used_p, up_used_c] : result_[conf.start_pos_]) {
+void Algo::Complete(size_t idx) {
+  for (auto conf : result_[idx]) {
+    if (conf.pos_ == conf.to_.size()) {
+      for (auto up_conf : result_[conf.start_pos_]) {
         if (up_conf.NextLetter() == conf.from_) {
-          result_[idx].push_back(Configuration(up_conf.from_, up_conf.to_, up_conf.pos_ + 1, up_conf.start_pos_));
+          result_[idx].insert(Configuration(up_conf.from_, up_conf.to_, up_conf.pos_ + 1, up_conf.start_pos_));
         }
       }
     }
   }
 }
 
-std::vector<State> Algo::GetData(int idx) const {
+std::set<Configuration> Algo::GetData(size_t idx) const {
   return result_[idx];
 }
 
 std::vector<Configuration> ParseInput(std::string input) {
   std::vector<Configuration> res;
   res.push_back(Configuration('A', "S", 0, 0));
-  int cur_start = 0;
+  size_t cur_start = 0;
   while (true) {
     auto pos = std::find(input.begin() + cur_start, input.end(), ' ');
     res.push_back(Configuration(input, pos - input.begin() - cur_start, cur_start));

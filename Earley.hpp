@@ -1,6 +1,7 @@
 #ifndef EARLEY_HPP
 #define EARLEY_HPP
 
+#include <set>
 #include <vector>
 #include <string>
 #include <exception>
@@ -14,35 +15,27 @@ public:
 struct Configuration {
   char from_;
   std::string to_;
-  int pos_;
-  int start_pos_;
+  size_t pos_;
+  size_t start_pos_;
   
   Configuration();
   
-  Configuration(char symb, const std::string& state, int pos = 0, int start_pos = 0);
+  Configuration(char symb, const std::string& state, size_t pos = 0, size_t start_pos = 0);
   
-  Configuration(const std::string& input, int size, int cur_start);
+  Configuration(const std::string& input, size_t size, size_t cur_start);
   
   Configuration(const Configuration& other);
   
-  char NextLetter() const;
+  char& NextLetter();
 };
 
 bool operator==(const Configuration& first, const Configuration& second);
+bool operator<(const Configuration& first, const Configuration& second);
 
 using Grammar = std::vector<Configuration>;
 
-struct State {
-  Configuration conf;
-  bool used_for_predict;
-  bool used_for_complete;
-  
-  State();
-  State(const Configuration& c, bool used_p = false, bool used_c = false);
-};
-
 class Algo {
-  std::vector<std::vector<State>> result_;
+  std::vector<std::set<Configuration>> result_;
   Grammar g_;
 public:
   Algo();
@@ -50,16 +43,14 @@ public:
   
   bool HasWord(const std::string& word);
   
-  void Scan(const std::string& word, int idx);
+  void Scan(const std::string& word, size_t idx);
   
-  void Predict(int idx);
+  void Predict(size_t idx);
   
-  void Complete(int idx);
+  void Complete(size_t idx);
   
-  std::vector<State> GetData(int idx) const;
+  std::set<Configuration> GetData(size_t idx) const;
 };
-
-bool operator==(const State& first, const State& second);
 
 std::vector<Configuration> ParseInput(std::string input);
 bool NotTerm(char symb);
